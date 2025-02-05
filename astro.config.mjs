@@ -3,6 +3,7 @@ import tailwind from '@astrojs/tailwind'
 import mdx from '@astrojs/mdx'
 import react from '@astrojs/react'
 import expressiveCode from 'astro-expressive-code'
+import sitemap from '@astrojs/sitemap'
 
 // https://astro.build/config
 export default defineConfig({
@@ -22,7 +23,8 @@ export default defineConfig({
       }
     }),
     mdx(),
-    react()
+    react(),
+    sitemap()
   ],
   site: 'https://kagebunsher.com/'
 })
