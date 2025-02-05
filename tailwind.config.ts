@@ -12,10 +12,8 @@ export default {
         sans: ['Sora', ...defaultTheme.fontFamily.sans]
       },
       colors: {
-        lightModeBg: '#E6E6E6',
         darkModeBg: '#1A1A1A',
-        accentColor: '#A682FF',
-        lightModeText: 'black',
+        accentColor: '#706fd3',
         darkModeText: 'white'
       },
       screens: {
@@ -24,15 +22,7 @@ export default {
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       typography: (theme: any) => ({
-        lightMode: {
-          css: {
-            '--tw-prose-kbd': theme('colors.lightModeText'),
-            '--tw-prose-quote-borders': theme('colors.lightModeText'),
-            '--tw-prose-bullets': theme('colors.lightModeText'),
-            '--tw-prose-code': theme('colors.lightModeText')
-          }
-        },
-        darkMode: {
+        DEFAULT: {
           css: {
             '--tw-prose-kbd': theme('colors.darkModeText'),
             '--tw-prose-quote-borders': theme('colors.darkModeText'),

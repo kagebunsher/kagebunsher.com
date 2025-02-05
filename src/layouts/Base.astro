@@ -15,13 +15,13 @@ const {
 } = Astro.props
 ---
 
-<html lang={config.lang}>
+<html lang={config.lang} class="dark">
   <head>
     <BaseHead title={title} description={description} />
     <ViewTransitions />
   </head>
   <body
-    class="mx-auto max-w-[900px] bg-lightModeBg px-5 text-lightModeText scrollbar scrollbar-thumb-accentColor dark:bg-darkModeBg dark:text-darkModeText"
+    class="mx-auto max-w-[900px] bg-darkModeBg px-5 text-darkModeText scrollbar scrollbar-thumb-accentColor"
   >
     <Nav />
     <main
@@ -33,29 +33,13 @@ const {
 
     <script>
       import config from '@/config'
-
-      function colorMode() {
-        if (
-          localStorage.theme === 'dark' ||
-          (!('theme' in localStorage) &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches)
-        ) {
-          document.documentElement.classList.add('dark')
-          document.documentElement.setAttribute(
-            'data-theme',
-            config.themes.dark as string
-          )
-        } else {
-          document.documentElement.classList.remove('dark')
-          document.documentElement.setAttribute(
-            'data-theme',
-            config.themes.dark as string
-          )
-        }
+      
+      function setDarkMode() {
+        document.documentElement.setAttribute('data-theme', config.themes.dark as string)
       }
 
-      colorMode()
-      document.addEventListener('astro:after-swap', colorMode)
+      setDarkMode()
+      document.addEventListener('astro:after-swap', setDarkMode)
     </script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 ---
-title: 'manuel offline sam dump alma'
+title: 'hivelardan ntlm hashleri nasıl çıkartılıyor?'
 description: 'toollar bunu yapıyor, ama arkada neler dönüyor?'
 pubDate: '05 Şubat 2025'
 tags: ['red team', 'windows']
@@ -9,16 +9,17 @@ tags: ['red team', 'windows']
   <img src="/images/blog/no-ai.png" style={{ maxWidth: '60%', height: 'auto' }} />
 </div>
 
+> bu yazıda anlatılan teknik, MITRE ATT&CK framework'ünde [T1003.002 - OS Credential Dumping: Security Account Manager](https://attack.mitre.org/techniques/T1003/002/) olarak tanımlanmaktadır.
 
 ## tl;dr
-windows sam hive'ında hashler tutuyor. system hive'ında 4 farklı dosyada bootkeyin parçaları var. hashleri çözebilmek için ilk onu elde ediyoruz sonra samdaki hashleri çözüyoruz.
+windows sam hive'ında hashler tutuyor. system hive'ında 4 farklı dosyada bootkeyin parçaları var. ilk bootkey parçalarını elde ediyoruz, bazı algoritmalara sokuyoruz ve sonra samdaki hashleri çözüyoruz.
 
 ## sam nedir?
 
 sam, windows işletim sisteminin local kullanıcı hesaplarını ve bu hesaplara ait NTLM (eskiden LM) parola hashlerini saklayan bir veritabanıdır. bu veritabanı genellikle %SystemRoot%\System32\config\SAM dosyasında bulunur ve izinlerle korunur. ek olarak bu veriler, SYSTEM registry hive'ında saklı anahtarlarla şifrelenir.
 
 ### neden ele geçirmek istiyoruz?
-diğer kullanıcıların hesaplarını ele geçirebilirsek farklı veriler elde edebiliriz.
+diğer kullanıcıların hesaplarını ele geçirebilirsek (özellikle [LAPS](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-overview) kullanmayan kurumlarda) farklı veriler elde edebiliriz.
 
 aynı zamanda aynı parolaların farklı makinelerde kullanılması durumunda ağ içinde yatay hareket (lateral movement) yapabiliriz. 
 
@@ -64,7 +65,7 @@ bu alt anahtarlar XOR ve (gerekirse) byte swap / sıralama ile buradaki veriler 
 impacket (secretsdump.py) yaklaşımında en yaygın uygulama, her bir alt anahtardaki byte’ları sırasıyla bootKey dizisiyle XOR yaparak toplamak şeklindedir.
 Örneğin bootKey[i] ^= JD[i], sonra bootKey[i] ^= Skew1[i], vs…
 
-bazı eski mimikatz sürümlerinde veya farklı windows sürümlerinde ek bir “byte-swap” (ilk 8 bayt ile son 8 baytın yer değiştirmesi vb.) ya da sabit bir tabloda tanımlı XOR gibi ufak ek adımlar olabilir.
+farklı windows sürümlerinde ek bir “byte-swap” (ilk 8 bayt ile son 8 baytın yer değiştirmesi vb.) ya da sabit bir tabloda tanımlı XOR gibi ufak ek adımlar olabilir.
 
 bu algoritmalar sonrası BootKey'i elde ediyor olucaz.
 
@@ -87,13 +88,13 @@ F verisi:
 
 
 windows samkey'i şu yolla şifreler:
-- MD5 üzerinde bir “digest” hesaplar.
-    - MD5’e giden veri: bootkey (16 byte) + sabit 4 byte (\x00\x00\x00\x00) veya başka bir sabit dizi.
-- elde edilen 16 byte’lık MD5 çıktısı, RC4 algoritması için key olarak kullanılır.
+- MD5 üzerinde bir "digest" hesaplar.
+    - MD5'e giden veri: bootkey (16 byte) + sabit 4 byte (\x00\x00\x00\x00) veya başka bir sabit dizi.
+- elde edilen 16 byte'lık MD5 çıktısı, RC4 algoritması için key olarak kullanılır.
 
 bootkey'e sahipseniz yine oldukça basit. samkey'i çözmek için gerekli olan koda [buradan](https://gist.github.com/kagebunsher/8eb7175295029ea33b2f54c44b2f162f) ulaşabilirsiniz.
 
-### 4. kullanıcı hesapları + hash değerlerini dökmek
+## 4. kullanıcı hesapları + hash değerlerini dökmek
 
 windows, her yerel kullanıcı hesabına bir RID (relative ID) atar. örneğin:
 
@@ -112,12 +113,12 @@ bu değerler de samkey ile (yine rc4, bazen ek md5/des) şifrelenmiştir.
 
 Windows sürümüne göre ufak farklar olsa da temel mantık:
 - MD5(SamKey + RID + ...) => RC4 Key
-- sonra “V” datasındaki LM/NT bloklarını sırasıyla decrypt et.
+- sonra "V" datasındaki LM/NT bloklarını sırasıyla decrypt et.
 
 ## 5. hashleri çözmek
-“V” yapısında “LM Hash” genelde bir offsette (16 bayt), “NT Hash” başka bir offsette (16 bayt) bulunur.
-bazı sürümlerde password history de eklendiği için offset’ler değişebilir.
-impacket bu offset’leri “V” datasının header’ından okur. mimikatz da aynı.
+"V" yapısında "LM Hash" genelde bir offsette (16 bayt), "NT Hash" başka bir offsette (16 bayt) bulunur.
+bazı sürümlerde password history de eklendiği için offset'ler değişebilir.
+impacket bu offset'leri "V" datasının header'ından okur. mimikatz da aynı.
 
 örneğin:
 
@@ -125,10 +126,9 @@ LM Hash 0x70. bayttan 16 byte uzunluğunda
 NT Hash 0xA0. bayttan 16 byte uzunluğunda
 Her bir bloğu SamKey + (RID vb.) yardımıyla RC4 decrypt ettiğinizde, 16 bayt düz (plain) hash elde edersiniz.
 
-2.4 16 Bayt Hash’i Hex Formatına Çevirmek
-Hem LM Hash hem de NT Hash 16’şar baytlık binary veridir. Bunu “E52CAC67419A9A22B9AB…” gibi bir hex stringe dönüştürmek için tipik bir hex() veya “bin2hex” işlemi yaparsınız.
+hem LM Hash hem de NT Hash 16'şar baytlık binary veridir. Bunu "E52CAC67419A9A22B9AB..." gibi bir hex stringe dönüştürmek için tipik bir hex() veya "bin2hex" işlemi yaparsınız.
 
-modern Windows’larda LM çoğunlukla AAD3B435B51404EEAAD3B435B51404EE olarak çıkar (yani boş).
+modern Windows'larda LM çoğunlukla AAD3B435B51404EEAAD3B435B51404EE olarak çıkar (yani boş).
 NT Hash ise gerçek MD4(Unicode(Parola)) özetidir.
 
 ## bitiş
