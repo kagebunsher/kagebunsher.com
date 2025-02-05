@@ -9,7 +9,7 @@ export default defineConfig({
   integrations: [
     tailwind(),
     expressiveCode({
-      themes: ['github-dark', 'github-light'],
+      themes: ['github-dark'],
       styleOverrides: {
         frames: {
           editorActiveTabIndicatorTopColor: 'transparent',
