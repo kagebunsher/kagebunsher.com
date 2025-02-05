@@ -1,0 +1,143 @@
+---
+title: 'manuel offline sam dump alma'
+description: 'toollar bunu yapıyor, ama arkada neler dönüyor?'
+pubDate: '05 Şubat 2025'
+tags: ['red team', 'windows']
+---
+
+<div style={{ display: 'flex', justifyContent: 'center', margin: '0rem 0', flexDirection: 'column', alignItems: 'center' }}>
+  <img src="/images/blog/no-ai.png" style={{ maxWidth: '60%', height: 'auto' }} />
+</div>
+
+
+## tl;dr
+windows sam hive'ında hashler tutuyor. system hive'ında 4 farklı dosyada bootkeyin parçaları var. hashleri çözebilmek için ilk onu elde ediyoruz sonra samdaki hashleri çözüyoruz.
+
+## sam nedir?
+
+sam, windows işletim sisteminin local kullanıcı hesaplarını ve bu hesaplara ait NTLM (eskiden LM) parola hashlerini saklayan bir veritabanıdır. bu veritabanı genellikle %SystemRoot%\System32\config\SAM dosyasında bulunur ve izinlerle korunur. ek olarak bu veriler, SYSTEM registry hive'ında saklı anahtarlarla şifrelenir.
+
+### neden ele geçirmek istiyoruz?
+diğer kullanıcıların hesaplarını ele geçirebilirsek farklı veriler elde edebiliriz.
+
+aynı zamanda aynı parolaların farklı makinelerde kullanılması durumunda ağ içinde yatay hareket (lateral movement) yapabiliriz. 
+
+## adımlar
+
+offline dump şu adımlarla gerçekleşir (en az local admin yetkisi gerekir):
+
+- SAM ve SYSTEM hive dosyalarını elde etmek
+- SYSTEM hive'ından “BootKey” (SysKey) çıkarma
+- SAM hive'ından SamKey çıkarma
+- kullanıcı hesapları + hash değerlerini dökmek
+- hashleri çözmek
+
+### 1. SAM ve SYSTEM hive dosyalarını elde etmek
+aslında oldukça basit.
+
+ilk yöntem olarak aşağıdaki reg save komutlarını çalıştırarak SYSTEM ve SAM hive dosyalarını elde edebiliriz.
+
+```powershell
+psexec.exe -s cmd.exe /c reg save HKLM\SYSTEM C:\kagebunsher\SYSTEM
+psexec.exe -s cmd.exe /c reg save HKLM\SAM C:\kagebunsher\SAM
+```
+
+ya da volume shadow copy komutunu kullanarak shadow copy'lerden elde edebiliriz.
+```powershell
+psexec.exe -s cmd.exe /c vssadmin create shadow /for=C:
+psexec.exe -s cmd.exe /c mklink /D C:\shadowcopy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\
+psexec.exe -s cmd.exe /c copy C:\shadowcopy\Windows\System32\config\SAM C:\kagebunsher\SAM
+psexec.exe -s cmd.exe /c copy C:\shadowcopy\Windows\System32\config\SYSTEM C:\kagebunsher\SYSTEM
+```
+
+### 2. SYSTEM dosyasından "BootKey" (SysKey) çıkarma
+
+windows, SAM dosyasını doğrudan değil, bir üst seviye anahtar (bootkey/syskey) ile şifreleyerek saklar. bu anahtar, SYSTEM hiveındaki birden fazla alt anahtardan türetilir. aşağıdaki alt anahtarların içeriğinden 16şar baytlık 4 veri okunur.
+
+- HKLM\SYSTEM\CurrentControlSet\Control\Lsa\JD
+- HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Skew1
+- HKLM\SYSTEM\CurrentControlSet\Control\Lsa\GBG
+- HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Data
+
+bu alt anahtarlar XOR ve (gerekirse) byte swap / sıralama ile buradaki veriler toplanarak 16 byte'lık bir "BootKey" oluşturulur. 
+
+impacket (secretsdump.py) yaklaşımında en yaygın uygulama, her bir alt anahtardaki byte’ları sırasıyla bootKey dizisiyle XOR yaparak toplamak şeklindedir.
+Örneğin bootKey[i] ^= JD[i], sonra bootKey[i] ^= Skew1[i], vs…
+
+bazı eski mimikatz sürümlerinde veya farklı windows sürümlerinde ek bir “byte-swap” (ilk 8 bayt ile son 8 baytın yer değiştirmesi vb.) ya da sabit bir tabloda tanımlı XOR gibi ufak ek adımlar olabilir.
+
+bu algoritmalar sonrası BootKey'i elde ediyor olucaz.
+
+genel olarak adımları tek tek kod ile yazacağım. 
+
+bootkey'i elde eden koda [buradan](https://gist.github.com/kagebunsher/3104405ade2840724154384f01c70163) ulaşabilirsiniz.
+
+sonuç:
+![bootkey](/images/blog/offline-dump/bootkey.png)
+
+
+## 3. SAM hive'ından SamKey çıkarma
+artık elimizde, bir önceki adımda elde ettiğiniz 16 baytlık bootkey (syskey) var. 
+şimdi, SAM\Domains\Account altındaki F isimli REG_BINARY verisindeki samkey alanını kırmamız gerekiyor.
+
+F verisi:
+- bu veri 70–80 bayt civarı bir binary bloktan oluşur.
+- bu binary blok yapısı, encrypted (RC4) bir samkey içerir.
+- ayrıca sürüm bilgisi, sabitler, vb. birkaç alan daha olabilir. biz sadece samkey ile ilgileniyoruz.
+
+
+windows samkey'i şu yolla şifreler:
+- MD5 üzerinde bir “digest” hesaplar.
+    - MD5’e giden veri: bootkey (16 byte) + sabit 4 byte (\x00\x00\x00\x00) veya başka bir sabit dizi.
+- elde edilen 16 byte’lık MD5 çıktısı, RC4 algoritması için key olarak kullanılır.
+
+bootkey'e sahipseniz yine oldukça basit. samkey'i çözmek için gerekli olan koda [buradan](https://gist.github.com/kagebunsher/8eb7175295029ea33b2f54c44b2f162f) ulaşabilirsiniz.
+
+### 4. kullanıcı hesapları + hash değerlerini dökmek
+
+windows, her yerel kullanıcı hesabına bir RID (relative ID) atar. örneğin:
+
+- Administrator - 500
+- Guest - 501
+- yeni kullanıcı eklenmişse - 1001, 1002 vb.
+
+sam hive'ında HKLM\SAM\SAM\Domains\Account\Users\<RID>\V içinde hashler bulunur. aslında sadece hashler değil, aşağıdaki veriler.
+- kullanıcının LM Hash
+- kullanıcının NT Hash
+- bazı ek alanlar (ör. password history, flags, vb.)
+
+bu değerler de samkey ile (yine rc4, bazen ek md5/des) şifrelenmiştir.
+
+![bootkey](/images/blog/offline-dump/v.png)
+
+Windows sürümüne göre ufak farklar olsa da temel mantık:
+- MD5(SamKey + RID + ...) => RC4 Key
+- sonra “V” datasındaki LM/NT bloklarını sırasıyla decrypt et.
+
+## 5. hashleri çözmek
+“V” yapısında “LM Hash” genelde bir offsette (16 bayt), “NT Hash” başka bir offsette (16 bayt) bulunur.
+bazı sürümlerde password history de eklendiği için offset’ler değişebilir.
+impacket bu offset’leri “V” datasının header’ından okur. mimikatz da aynı.
+
+örneğin:
+
+LM Hash 0x70. bayttan 16 byte uzunluğunda
+NT Hash 0xA0. bayttan 16 byte uzunluğunda
+Her bir bloğu SamKey + (RID vb.) yardımıyla RC4 decrypt ettiğinizde, 16 bayt düz (plain) hash elde edersiniz.
+
+2.4 16 Bayt Hash’i Hex Formatına Çevirmek
+Hem LM Hash hem de NT Hash 16’şar baytlık binary veridir. Bunu “E52CAC67419A9A22B9AB…” gibi bir hex stringe dönüştürmek için tipik bir hex() veya “bin2hex” işlemi yaparsınız.
+
+modern Windows’larda LM çoğunlukla AAD3B435B51404EEAAD3B435B51404EE olarak çıkar (yani boş).
+NT Hash ise gerçek MD4(Unicode(Parola)) özetidir.
+
+## bitiş
+böylece windows'da  offline dump alma işlemini konuşmuş olduk.
+
+elde edilen hash'i pth metotu ile kullanabiliriz.
+
+- crackmapexec smb 172.23.80.1 -u kagebunsher -H \<hacıladığımız-hash\> -c 'whoami' 
+
+bu arada son kısım için gerekli c kodunu yazamadım, açıkcası diğerlerini yazmak çok vakit alıyordu ve son kısım için yeterince vaktim yoktu. muhtemelen bu yazının hepsini ai'a versek direkt yazabilir diye düşünüyorum.
+
+yeni yazılarda görüşmek üzere.

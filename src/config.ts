@@ -7,17 +7,15 @@ type Config = {
   lang: string
   themes: {
     dark: ThemeObjectOrShikiThemeName
-    light: ThemeObjectOrShikiThemeName
   }
 }
 
 export default {
-  author: 'Samuel Breznjak',
-  title: 'Minimal - Astro blog theme',
-  description: 'Minimalistic blog theme for astro',
-  lang: 'en',
+  author: 'kagebunsher',
+  title: 'kagebunsher',
+  description: 'newschool cyber security blog',
+  lang: 'tr',
   themes: {
-    dark: 'github-dark',
-    light: 'github-light'
+    dark: 'github-dark'
   }
 } satisfies Config

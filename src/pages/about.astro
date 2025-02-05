@@ -4,16 +4,38 @@ import Base from '@/layouts/Base.astro'
 
 <Base meta={{ title: 'About' }}>
   <h2 class="text-2xl font-medium tracking-wide text-accentColor w500:text-lg">
-    About
+    about
   </h2>
 
   <div class="mt-4 tracking-wide w500:text-sm w500:leading-[2.2]">
-    <p>
-      Minimal is minimalistic astro blog theme. Check the <a
-        class="underline"
-        target="_blank"
-        href="https://github.com/ekmas/minimal">project repo</a
-      > for more info.
-    </p>
+    <div class="items-start space-y-2 xl:grid xl:grid-cols-3 xl:gap-x-8 xl:space-y-0">
+      <div class="flex flex-col items-center space-x-2 pt-8">
+        <img
+          alt="avatar"
+          loading="lazy"
+          width="192"
+          height="192"
+          decoding="async"
+          data-nimg="1"
+          class="h-48 w-48 rounded-full"
+          src="/images/avatar.webp"
+          style="color: transparent;"
+        />
+        <h3 class="pb-2 pt-4 text-2xl font-bold leading-8 tracking-tight">kage bunsher</h3>
+        <div class="text-gray-500 dark:text-gray-400">cyber security enthusiast</div>
+        <div class="text-gray-500 dark:text-gray-400"></div>
+        <div class="flex space-x-3 pt-6"></div>
+      </div>
+
+      <div class="prose pt-6 text-justify dark:prose-invert xl:col-span-2">
+        <p>
+          kagebunsher has made technology an integral part of his life, constantly improving himself in it and cybersecurity. in his own words, he's a bit of a "nerd," but he's also a highly extraverted individual who enjoys connecting with others. exploring new technologies, experimenting with different solutions, and continuously learning are just everyday activities for him.
+        </p>
+        <p>
+          while his main hobby is diving deep into technical research and experimenting with new concepts, he also has an unexpected passion for magic tricks - though he enjoys the art of illusion and sleight of hand in his spare time.
+        </p>
+
+      </div>
+    </div>
   </div>
 </Base>
